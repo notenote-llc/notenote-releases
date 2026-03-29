@@ -1,0 +1,53 @@
+name: Create Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'releases/*.json'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get release info
+        id: info
+        run: |
+          RELEASE_FILE=$(ls -t releases/*.json | head -1)
+          TAG=$(jq -r '.tag' "$RELEASE_FILE")
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Release tag: $TAG"
+
+      - name: Download assets from private repo
+        env:
+          GH_TOKEN: ${{ secrets.APPS_PAT }}
+        run: |
+          mkdir -p assets
+          TAG="${{ steps.info.outputs.tag }}"
+          gh release download "$TAG" \
+            --repo notenote-llc/notenote-apps \
+            --pattern "*.dmg" \
+            --pattern "*.dmg.blockmap" \
+            --pattern "latest-mac.yml" \
+            --dir ./assets
+          ls -la assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.info.outputs.tag }}
+          name: NoteNote ${{ steps.info.outputs.tag }}
+          body: |
+            Download the NoteNote desktop app.
+
+            **Mac (Apple Silicon):** NoteNote-*-arm64.dmg
+            **Mac (Intel):** NoteNote-*.dmg (without arm64)
+          files: assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
